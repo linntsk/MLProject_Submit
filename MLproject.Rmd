@@ -91,8 +91,7 @@ Apply random forest algorithm on the "TrainR" subset.
 
 ```{r}
 method <- "rf"
-system.time(trainingModel <- train(classe ~ ., data=TrainR, method=method))
-stopCluster(cl)
+system.time(TrainAModel <- train(classe ~ ., data=TrainR, method=method))
 ```
 
 Evaluate the model on the training dataset
