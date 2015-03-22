@@ -1,0 +1,155 @@
+
+### Prediction with Machine Learning  
+
+##### Date: 22 Mar 2015
+
+#### 1. Objective
+The objective of this project is to predict the manner in which participant did the exercise as measured by the "classe" variable. Six participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways.The data from accelerometers on the belt, forearm, arm and dumbell of the participants were recorded to see how well they do it.
+
+#### 2. Data Source
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: 
+http://groupware.les.inf.puc-rio.br/har.
+
+Save the datasets into your working directory.
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+setwd("~/Documents/Coursera_DS/Module8/Course Project")
+library(caret)
+library(rattle)
+dataset = read.csv("pml-training.csv", header = TRUE)
+testing = read.csv("pml-testing.csv", header = TRUE)
+```
+
+#### 3. Data Transformation
+To use non-zero and NA values of belt, arm, dumbbell, and forearm variables as predictors of classe.
+
+```{r}
+missingvar <- sapply(dataset, function (x) any(is.na(x)|x==""))
+predictvar <- !missingvar & grepl("belt|[^(fore)]arm|dumbbell|forearm", names(missingvar))
+predictors <- names(missingvar)[predictvar]
+predictors
+```
+
+Reduce the columns in the original dataset to include only predictors of classe
+```{r}
+dataR <- dataset[,c("classe",predictors)]
+```
+
+Number of observations in each classe
+```{r}
+summary(dataR$classe)
+```
+
+To carry out cross validation, we split the reduced dataset into 60% training and 40% probing.
+```{r}
+set.seed(1234)
+inTrain <- createDataPartition(dataR$classe, p=0.6, list=FALSE)
+Train <- dataR[inTrain,]
+Probe <- dataR[-inTrain,]
+```
+
+#### 4. Develop Prediction Model
+Apply classification tree to narrow down the number of predictors before running the Random Forest Algorithm.
+
+```{r}
+set.seed(1234)
+model1 <-train(classe~., data=Train, method="rpart")
+print(model1$finalModel)
+varImp(model1)
+```
+
+By studying the varImp, apply the smaller predictor-set to run the Random Forest Algorithm.
+
+```{r}
+TrainR <- Train[,c("classe","magnet_dumbbell_y","pitch_forearm",
+                   "roll_belt","roll_dumbbell","roll_forearm",
+                   "accel_belt_z","magnet_dumbbell_x","magnet_belt_y",
+                   "magnet_dumbbell_z","pitch_belt","total_accel_belt",
+                   "magnet_arm_x","accel_arm_x","yaw_belt","accel_forearm_x",
+                   "accel_dumbbell_y","gyros_belt_z","yaw_forearm")]
+```
+
+Set up the parallel clusters
+
+```{r}
+library(parallel)
+library(doParallel)
+cl <- makeCluster(detectCores() - 1)
+registerDoParallel(cl)
+ctrl <- trainControl(classProbs=TRUE,
+                     savePredictions=TRUE,
+                     allowParallel=TRUE)
+```
+
+Apply random forest algorithm on the "TrainR" subset.
+
+```{r}
+method <- "rf"
+system.time(trainingModel <- train(classe ~ ., data=TrainR, method=method))
+stopCluster(cl)
+```
+
+Evaluate the model on the training dataset
+
+```{r}
+TrainAModel
+```
+
+Examine the confusion matrix and it should show Accuracy of 1.
+
+```{r}
+pred_Train <- predict(TrainAModel, TrainR)
+confusionMatrix(pred_Train, TrainR$classe)
+```
+
+Evaluate the model on the probing dataset. Examine the confusion matrix to see how well the predictive model performed on the ProbeR dataset. It shows Accuracy of 0.9915.
+
+```{r}
+ProbeR <- Probe[,c("classe","magnet_dumbbell_y","pitch_forearm",
+                   "roll_belt","roll_dumbbell","roll_forearm",
+                   "accel_belt_z","magnet_dumbbell_x","magnet_belt_y",
+                   "magnet_dumbbell_z","pitch_belt","total_accel_belt",
+                   "magnet_arm_x","accel_arm_x","yaw_belt","accel_forearm_x",
+                   "accel_dumbbell_y","gyros_belt_z","yaw_forearm")]
+pred_Probe <- predict(TrainAModel, ProbeR)
+confusionMatrix(pred_Probe, ProbeR$classe)
+```
+
+Show the final model. The estimated error rate is less than 1%.
+
+```{r}
+TrainAModel$finalModel
+```
+
+#### 5. Apply Prediction Model on Test Data
+
+```{r}
+TestR <- testing[,c("problem_id","magnet_dumbbell_y","pitch_forearm",
+                   "roll_belt","roll_dumbbell","roll_forearm",
+                   "accel_belt_z","magnet_dumbbell_x","magnet_belt_y",
+                   "magnet_dumbbell_z","pitch_belt","total_accel_belt",
+                   "magnet_arm_x","accel_arm_x","yaw_belt","accel_forearm_x",
+                   "accel_dumbbell_y","gyros_belt_z","yaw_forearm")]
+pred_Test <- predict(TrainAModel, TestR)
+```
+
+#### 6. Submission to Coursera
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  path <- "~/Documents/Coursera_DS/Module8/Course Project/answers"
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=file.path(path, filename),quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(pred_Test)
+```
+
